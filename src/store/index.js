@@ -5,14 +5,39 @@ import router from '../router/index'
 
 Vue.use(Vuex)
 
-export default new Vuex.Store({
-  state: {
-    userProfile: {}
+// export default new Vuex.Store({
+//   state: {
+//     userProfile: {}
+//   },
+
+//realtime firebase connection
+fb.postsCollection.orderBy('createdOn' ,'desc').onSnapshot(snapshot => {
+  let postsArray =[]
+
+  snapshot.forEach(doc =>{
+    let post = doc.data()
+    post.id = doc.id
+
+    postsArray.push(post)
+  })
+
+  store.commit('setPosts' ,postsArray)
+})
+
+//need to access store so we need to change around how its exported
+const store = new Vuex.Store({
+
+  state:{
+    userProfile: {},
+    posts:[]
   },
 
   mutations: {
     setUserProfile(state, val) {
       state.userProfile = val
+    },
+    setPosts(state ,val){
+      state.posts = val
     }
   },
 
@@ -47,7 +72,10 @@ export default new Vuex.Store({
       commit('setUserProfile', userProfile.data())
       
       // change route to dashboard
-      router.push('/')
+      if (router.currentRoute.path === '/login') {
+        router.push('/')
+      }
+
     },
 
     async logout({commit}){
@@ -57,8 +85,44 @@ export default new Vuex.Store({
       commit('setUserProfile' ,{})
       router.push('/login')
 
-    }
+    },
 
+    async createPost({ state,commit },post){
+      console.log(commit)
+      await fb.postsCollection.add({
+        createdOn : new Date(),
+        content: post.content,
+        userId:fb.auth.currentUser.uid,
+        userName:state.userProfile.name,
+        comments:0,
+        likes:0
+      })
+    },
+                    //{commit},post
+    async likePost ( {state}, post ) {
+      post=post.post;
+      console.log(state)
+      const userId = fb.auth.currentUser.uid
+      const docId = `${userId}_${post.id}`
+    
+      
+
+      // check if user has liked post
+      const doc = await fb.likesCollection.doc(docId).get()
+      if (doc.exists) { return }
+
+      // create post
+      await fb.likesCollection.doc(docId).set({
+        postId: post.id,
+        userId: userId,
+      })
+      
+      
+      // update post likes count
+      fb.postsCollection.doc(post.id).update({
+        likes: post.likes + 1
+      })
+    },
   },
 
   modules:{
@@ -66,3 +130,4 @@ export default new Vuex.Store({
   }
 })
 
+export default store
